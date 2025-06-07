@@ -1,0 +1,65 @@
+{
+  "name": "@scatter-ly/wholesale-frontend",
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scatter-ly/wholesale-frontend.git"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "dist/index.js",
+  "dependencies": {
+    "@babel/traverse": "^7.23.0",
+    "chokidar": "^3.5.3",
+    "ejs": "3.1.6",
+    "express": "^4.18.2",
+    "json5": "^1.0.2",
+    "shell-quote": "1.7.2",
+    "typescript": "^4.7.4"
+  },
+  "devDependencies": {
+    "@spotify/eslint-config-base": "^14.0.2",
+    "@spotify/eslint-config-typescript": "^14.0.2",
+    "@spotify/prettier-config": "^14.0.2",
+    "@types/eslint": "^8.4.5",
+    "@types/express": "^4.17.14",
+    "@types/prettier": "^2.6.3",
+    "@typescript-eslint/eslint-plugin": "^5.31.0",
+    "@typescript-eslint/parser": "^5.31.0",
+    "concurrently": "^7.3.0",
+    "eslint": "^8.20.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-jest": "^27.0.1",
+    "lint-staged": "^13.0.3",
+    "prettier": "^2.7.1",
+    "yarn-lock-check": "^1.0.5"
+  },
+  "scripts": {
+    "dev": "yarn build:watch && node dist/index.js",
+    "build": "NODE_ENV=production tsc --noEmit false",
+    "build:dev": "tsc --noEmit false",
+    "build:watch": "tsc --watch --noEmit false",
+    "clean": "rm -rf node_modules/.cache && rm -rf dist",
+    "artifactregistry-login": "npx google-artifactregistry-auth",
+    "lint": "eslint --ext .js,.ts .",
+    "prettier:check": "prettier --check .",
+    "lock:check": "yarn-lock-check"
+  },
+  "prettier": "@spotify/prettier-config",
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs},!.eslintrc.js": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    ".eslintrc.js": [
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "packageManager": "yarn@3.8.3"
+}
