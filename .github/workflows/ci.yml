@@ -180,6 +180,12 @@ jobs:
 
       - name: Publish NPM package to GitHub
         run: |-
+          # get git short sha, commit email, commit name
+          gitInfo=$(git log --pretty=format:"%h|%ce|%cn" -1)
+          email=$(echo $gitInfo | awk -F'|' '{print $2}')
+          name=$(echo $gitInfo | awk -F'|' '{print $3}')
+          git config --global user.email "$email"
+          git config --global user.name "$name"
           npm version prerelease --preid=pr
           npm publish package.tgz --tag pr
         env:
@@ -252,6 +258,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Docker Setup Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opts: image=moby/buildkit:master,network=host
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -266,5 +279,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=scatter-ly/wholesale-frontend:buildcache
-          cache-to: type=registry,ref=scatter-ly/wholesale-frontend:buildcache,mode=max
