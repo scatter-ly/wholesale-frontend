@@ -1,0 +1,270 @@
+name: Install, verify, build Wholesale Frontend
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  cache-prefix: 'wholesale-frontend'
+
+jobs:
+  # This step only runs yarn install to make sure that an exact match is available
+  # in the cache. The two following verify and tests jobs then always install from cache.
+  install:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x]
+    env:
+      CI: true
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    name: Install ${{ matrix.node-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: cache all node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: '**/node_modules'
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+
+      # If we get a cache hit for node_modules, there's no need to bring in the global
+      # yarn cache or run yarn install, as all dependencies will be installed already.
+      - name: find location of global yarn cache
+        id: yarn-cache
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: echo "dir=$([[ "$(yarn --version)" =~ "1.*" ]] && yarn cache dir || yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: cache global yarn cache
+        uses: actions/cache@v4
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+          restore-keys: |
+            ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-
+
+      - name: yarn install
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: '[[ "$(yarn --version)" =~ "1.*" ]] && yarn install --frozen-lockfile || yarn install --immutable'
+
+  # The verify jobs runs all the verification that doesn't require a
+  # diff towards main, since it takes some time to fetch that.
+  verify:
+    runs-on: ubuntu-latest
+    needs: install
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x]
+    env:
+      CI: true
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    name: Verify ${{ matrix.node-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: cache all node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: '**/node_modules'
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+
+      # If we get a cache hit for node_modules, there's no need to bring in the global
+      # yarn cache or run yarn install, as all dependencies will be installed already.
+      - name: find location of global yarn cache
+        id: yarn-cache
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: echo "dir=$([[ "$(yarn --version)" =~ "1.*" ]] && yarn cache dir || yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: cache global yarn cache
+        uses: actions/cache@v4
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+          restore-keys: |
+            ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-
+
+      - name: yarn install
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: '[[ "$(yarn --version)" =~ "1.*" ]] && yarn install --frozen-lockfile || yarn install --immutable'
+
+      - name: type checking and declarations
+        run: yarn tsc --skipLibCheck true --incremental false
+
+      - name: prettier
+        run: yarn prettier:check
+
+  build-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    needs: install
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x]
+    env:
+      CI: true
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    name: Build NPM package with NodeJS ${{ matrix.node-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: 'https://npm.pkg.github.com'
+          # Defaults to the user or organization that owns the workflow file
+          scope: '@scatter-ly'
+
+      - name: cache all node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: '**/node_modules'
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+
+      # If we get a cache hit for node_modules, there's no need to bring in the global
+      # yarn cache or run yarn install, as all dependencies will be installed already.
+      - name: find location of global yarn cache
+        id: yarn-cache
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: echo "dir=$([[ "$(yarn --version)" =~ "1.*" ]] && yarn cache dir || yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: cache global yarn cache
+        uses: actions/cache@v4
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+          restore-keys: |
+            ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-
+
+      - name: yarn install
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: '[[ "$(yarn --version)" =~ "1.*" ]] && yarn install --frozen-lockfile || yarn install --immutable'
+
+      - name: yarn build
+        run: yarn build
+
+      - name: Generate archive
+        run: yarn pack
+
+      - name: Publish NPM package to GitHub
+        run: |-
+          npm version prerelease --preid=pr
+          npm publish package.tgz --tag pr
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-container:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+    needs: install
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x]
+    env:
+      CI: true
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    name: Build Container with NodeJS ${{ matrix.node-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: 'https://npm.pkg.github.com'
+          # Defaults to the user or organization that owns the workflow file
+          scope: '@scatter-ly'
+
+      - name: cache all node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: '**/node_modules'
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+
+      # If we get a cache hit for node_modules, there's no need to bring in the global
+      # yarn cache or run yarn install, as all dependencies will be installed already.
+      - name: find location of global yarn cache
+        id: yarn-cache
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: echo "dir=$([[ "$(yarn --version)" =~ "1.*" ]] && yarn cache dir || yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: cache global yarn cache
+        uses: actions/cache@v4
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('yarn.lock', '**/package.json') }}
+          restore-keys: |
+            ${{ env.cache-prefix }}-${{ matrix.node-version }}-node_modules-
+
+      - name: yarn install
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        shell: bash
+        run: '[[ "$(yarn --version)" =~ "1.*" ]] && yarn install --frozen-lockfile || yarn install --immutable'
+
+      - name: yarn build
+        run: yarn build
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+
+      - name: Build and push Docker images
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=scatter-ly/wholesale-frontend:buildcache
+          cache-to: type=registry,ref=scatter-ly/wholesale-frontend:buildcache,mode=max
